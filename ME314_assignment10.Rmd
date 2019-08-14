@@ -27,6 +27,8 @@ a) Make a dfm from the shuffled corpus, and make training labels. In this case, 
 #  replace = FALSE, prob = NULL, margin = c("documents", "features"))
 dfm.mov <- dfm(moviesShuffled, remove = stopwords("en"), remove_punct = TRUE, 
            remove_symbols = TRUE)
+
+dfm.mov <- dfm_trim(dfm.mov, remove_punct = TRUE, min_termfreq = 5, remove_symbols=TRUE)
 dfm.mov.train <- dfm_sample(dfm.mov, size = 1500, margin = "documents")      
 train <- which(docnames(dfm.mov.train) == docnames(dfm.mov.train))
 dfm.mov.test <- dfm.mov[-train]
@@ -35,12 +37,16 @@ dfm.mov.test <- dfm.mov[-train]
 
 b) Run the training and testing commands of the Naive Bayes classifier, and compare the predictions for the documents with the actual document labels for the test set using a confusion matrix.
 ```{r}
-# do we remove sentiment here? 
+# TODO ask do we remove sentiment here? 
 # do we set seed? 
+
 library(caret)
+
 post <- docvars(dfm.mov.train, field="Sentiment")
+
 nb.mov <- textmodel_nb(x = dfm.mov.train, post)
 nb.pred <- predict(nb.mov, type="class")
+
 caret::confusionMatrix(data = relevel(as.factor(nb.pred), ref = "neg"),
                        reference = relevel(as.factor(post), ref = "neg"))
 
@@ -70,9 +76,9 @@ precrecall <- function(mytable, verbose=TRUE) {
 precrecall(table(nb.pred, post))
 
 # positive class is "pos"
-precrecall(table(nb.pred, post)[2:1, 2:1])     # TODO ask isn't this the same?
+precrecall(table(nb.pred, post)[2:1, 2:1])     # this is the same thing..
 
-
+caret::confusionMatrix(table(nb.pred, post)[2:1, 2:1])
 ```
     
 Hint: Computing precision and recall is not the same if we are considering the "true positive" to be predicting positive for a true positive, versus predicting negative for a true negative.  Since the factors of `Sentiment` are ordered alphabetically, and since the table command puts lower integer codes for factors first, `movtable` by default puts the (1,1) cell as the case of predicting negative reviews as the "true positive", not predicting positive reviews.  To get the positive-postive prediction you will need to reverse index it, e.g. `movTable[2:1, 2:1]`.
@@ -80,6 +86,7 @@ Hint: Computing precision and recall is not the same if we are considering the "
 d) Extract the posterior class probabilities of the words `good` and `great`. Do the results confirm your previous finding? Clue: look at the documentation for `textmodel_nb()` for how to extract the posterior class probabilities.
 
 ```{r}
+
 # TODO problem
 tmod <- textmodel_nb(x = dfm.mov.train, y=c("good", "bad"))
 predict(tmod, type="logposterior")
@@ -89,8 +96,6 @@ predict(tmod, type="logposterior")
 
 ## Exercise 10.2
 
-
-
 ```{r}
 data(data_corpus_movies, package = "quanteda.corpora")
 ```
@@ -98,17 +103,84 @@ data(data_corpus_movies, package = "quanteda.corpora")
 a) Load the movies dataset from `quanteda.corpora` (install from GitHub with the provided code if necessary). Then, shuffle the dataset, and take a random sample of 500 of the movie reviews as your "reference" texts. As reference scores, set the ones that are positive to a reference value of +1, and the negative reviews to a value of -1.
 
 ```{r}
+
+set.seed(1234)
+
+moviesShuffled2 <- corpus_sample(data_corpus_movies, size = 2000)
+
+dfm.mov2 <- dfm(moviesShuffled2, remove = stopwords("en"), 
+                remove_punct = TRUE, remove_symbols = TRUE)
+
+dfm.mov2 <- dfm_trim(dfm.mov2, min_termfreq = 2, min_docfreq = 2, 
+                     remove_punct = TRUE, remove_symbols = TRUE)
+
+dfm.mov.ref <- dfm_sample(dfm.mov2, size = 500, margin = "documents")
+
+refscore <- rep(0, length(docnames(dfm.mov.ref)))
+
+refscore[docvars(dfm.mov.ref, field="Sentiment") == "neg"] <- -1
+refscore[docvars(dfm.mov.ref, field="Sentiment") == "pos"] <- 1
+
 ```
 
 b) Score the remaining movie reviews, and predict their "positive-negative" rating using Wordscores. Remember to first create a document-feature matrix. You may want to stem the features here.
+
 ```{r}
+
+# create not-ref dfm
+ref <- which(docnames(dfm.mov.ref) == docnames(dfm.mov.ref))
+dfm.mov.virgin <- dfm.mov[-ref]
+
+# clean up and stem
+# why stem here and not there? 
+virginscore <- rep(0, length(docnames(dfm.mov.virgin)))
+dfm.mov.virgin <- dfm_trim(dfm.mov.virgin, min_termfreq = 2, min_docfreq = 2, 
+                     remove_punct = TRUE, remove_symbols = TRUE)
+dfm.mov.virgin <- dfm_wordstem(dfm.mov.virgin)
+
+# create y
+virginscore[docvars(dfm.mov.virgin, field="Sentiment") == "neg"] <- -1
+virginscore[docvars(dfm.mov.virgin, field="Sentiment") == "pos"] <- 1
+
+# run model
+mov.wc <- textmodel_wordscores(x = dfm.mov.ref, y = refscore)
+mov.notref.pred <- predict(mov.wc, newdata = dfm.mov.virgin)
+
+
+# more elegant to mutate dfm itself with a new docvars stating "virgin" or "reference"
+# --------- from solution --------
+# create a DFM
+# moviesDfm <- dfm(moviesShuffled, stem = TRUE)
+
+# fit the wordscores model
+# ws <- textmodel_wordscores(moviesDfm, docvars(moviesShuffled, "refscore"))
+
+# predicting the scale for the other features
+# preds <- predict(ws, moviesDfm[docvars(moviesShuffled, "set") == "virgin", ])
+
 ```
 
 
 c) From the results of b, compare the values using `boxplot()` for the categories of their rater assigned positivity or negativity.  Describe the resulting pattern. Look for examples of positive reviews that are predicted to be negative and vice versa. Why do you think the model failed in those cases?
+
 ```{r}
+boxplot(mov.notref.pred ~ docvars(dfm.mov.virgin, "Sentiment"), ylab = "Raw wordscore") 
+
+# why is the boundary -0.05? 
+false_negative <- which(preds < -0.05 & docvars(dfm.mov.virgin)=="pos")
+length(false_negative)
+texts(data_corpus_movies)[sample(false_negative, 2)]
+
 ```
 
+**Model is not as accurate as we imagine. The text in reference text may sound very bad, or may have been judged very harshly. When predicting on virgin text (when virgin text is scored based on ref), this leads model to believe that movies are not liked.**
+
+```{r}
+false_positive <- which(preds > 0.05 & docvars(moviesShuffled, "Sentiment")[501:2000]=="neg")
+length(false_positive)
+```
+
+**I'm sure the model overfitted. **
 
 ## Exercise 10.3
 
