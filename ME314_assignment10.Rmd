@@ -10,14 +10,42 @@ In this assignment, you will use R to understand and apply document classificati
 We will start with a classic computer science dataset of movie reviews, [(Pang and Lee 2004)](http://www.cs.cornell.edu/home/llee/papers/cutsent.pdf). The movies corpus has an attribute `Sentiment` that labels each text as either `pos` or `neg` according to the original imdb.com archived newspaper review star rating.  We will begin by examining the conditional probabilities at the word level.
 
 ```{r}
+library("tm")           # for text mining
+library("quanteda")     # for text analysis
+library("readtext")     # for reading text
+library("quanteda.corpora")
+
 #devtools::install_github("quanteda/quanteda.corpora")
 set.seed(1234)  # use this just before the command below
 moviesShuffled <- corpus_sample(data_corpus_movies, size = 2000)
 ```
 
-a) Make a dfm from the shuffled corpus, and make training labels. In this case, we are using 1500 training labels, and leaving the remaining 500 unlabelled to use as a test set. We will also trim the dataset to remove rare features.
+a) Make a dfm from the shuffled corpus, and make training labels. In this case, we are using 1500 training labels, and leaving the remaining 500 unlabelled to use as a test set. We will also trim the dataset to remove rare features. 
+
+```{r}
+# dfm_sample(x, size = ifelse(margin == "documents", ndoc(x), nfeat(x)),
+#  replace = FALSE, prob = NULL, margin = c("documents", "features"))
+dfm.mov <- dfm(moviesShuffled, remove = stopwords("en"), remove_punct = TRUE, 
+           remove_symbols = TRUE)
+dfm.mov.train <- dfm_sample(dfm.mov, size = 1500, margin = "documents")      
+train <- which(docnames(dfm.mov.train) == docnames(dfm.mov.train))
+dfm.mov.test <- dfm.mov[-train]
+
+```
 
 b) Run the training and testing commands of the Naive Bayes classifier, and compare the predictions for the documents with the actual document labels for the test set using a confusion matrix.
+```{r}
+# do we remove sentiment here? 
+# do we set seed? 
+library(caret)
+post <- docvars(dfm.mov.train, field="Sentiment")
+nb.mov <- textmodel_nb(x = dfm.mov.train, post)
+nb.pred <- predict(nb.mov, type="class")
+caret::confusionMatrix(data = relevel(as.factor(nb.pred), ref = "neg"),
+                       reference = relevel(as.factor(post), ref = "neg"))
+
+```
+
 
 c) Compute the following statistics for the last classification:
 
@@ -37,11 +65,27 @@ precrecall <- function(mytable, verbose=TRUE) {
     }
     invisible(c(precision, recall))
 }
+
+# positive class is "neg"
+precrecall(table(nb.pred, post))
+
+# positive class is "pos"
+precrecall(table(nb.pred, post)[2:1, 2:1])     # TODO ask isn't this the same?
+
+
 ```
     
 Hint: Computing precision and recall is not the same if we are considering the "true positive" to be predicting positive for a true positive, versus predicting negative for a true negative.  Since the factors of `Sentiment` are ordered alphabetically, and since the table command puts lower integer codes for factors first, `movtable` by default puts the (1,1) cell as the case of predicting negative reviews as the "true positive", not predicting positive reviews.  To get the positive-postive prediction you will need to reverse index it, e.g. `movTable[2:1, 2:1]`.
 
 d) Extract the posterior class probabilities of the words `good` and `great`. Do the results confirm your previous finding? Clue: look at the documentation for `textmodel_nb()` for how to extract the posterior class probabilities.
+
+```{r}
+# TODO problem
+tmod <- textmodel_nb(x = dfm.mov.train, y=c("good", "bad"))
+predict(tmod, type="logposterior")
+
+```
+
 
 ## Exercise 10.2
 
@@ -53,9 +97,18 @@ data(data_corpus_movies, package = "quanteda.corpora")
 
 a) Load the movies dataset from `quanteda.corpora` (install from GitHub with the provided code if necessary). Then, shuffle the dataset, and take a random sample of 500 of the movie reviews as your "reference" texts. As reference scores, set the ones that are positive to a reference value of +1, and the negative reviews to a value of -1.
 
+```{r}
+```
+
 b) Score the remaining movie reviews, and predict their "positive-negative" rating using Wordscores. Remember to first create a document-feature matrix. You may want to stem the features here.
+```{r}
+```
+
 
 c) From the results of b, compare the values using `boxplot()` for the categories of their rater assigned positivity or negativity.  Describe the resulting pattern. Look for examples of positive reviews that are predicted to be negative and vice versa. Why do you think the model failed in those cases?
+```{r}
+```
+
 
 ## Exercise 10.3
 
