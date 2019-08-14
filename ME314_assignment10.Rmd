@@ -87,9 +87,8 @@ d) Extract the posterior class probabilities of the words `good` and `great`. Do
 
 ```{r}
 
-# TODO problem
-tmod <- textmodel_nb(x = dfm.mov.train, y=c("good", "bad"))
-predict(tmod, type="logposterior")
+# had trouble with this earlier. 
+nb.mov$PcGw[,c("good", "great")]
 
 ```
 
