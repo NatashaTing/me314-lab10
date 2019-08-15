@@ -172,11 +172,13 @@ texts(data_corpus_movies)[sample(false_negative, 2)]
 
 ```
 
-**Model is not as accurate as we imagine. The text in reference text may sound very bad, or may have been judged very harshly. When predicting on virgin text (when virgin text is scored based on ref), this leads model to believe that movies are not liked.**
+**Model is not as accurate as we imagine. The ref text is selected at random, so may not have the full body of text needed for virgin text. As noted, 4105 features in newdata are not used in prediction. The text in reference text may sound very bad, or may not have edge cases. When predicting on virgin text (when virgin text is scored based on ref), this leads model to believe that movies are not liked.**
 
 ```{r}
 false_positive <- which(preds > 0.05 & docvars(moviesShuffled, "Sentiment")[501:2000]=="neg")
 length(false_positive)
+# TODO ask why no false positive?
+# why is my answer the same as solution?
 ```
 
 **I'm sure the model overfitted. **
@@ -186,15 +188,49 @@ length(false_positive)
 In this part of the assignment, you will use R to understand and apply unsupervised document scaling. Use the `data_corpus_irishbudget2010` in **quanteda** for this.
 
 ```{r}
+
 irish_dfm <- dfm(data_corpus_irishbudget2010, stem = TRUE, 
                  remove = stopwords("en"), remove_punct = TRUE)
-wfFit <- textmodel_wordfish(...)
 ```
 
 a) Fit a wordfish model of all the documents in this corpus. Apply any required preprocessing steps first. Use the `textplot_scale1d` function to visualize the result. (You may want to use the advanced options of this function to get a better plot than just the default one.) What do you learn about what the dimension is capturing? You can use wikipedia to learn about the Irish parties involved in this debate to help you answer this question.
 
+```{r}
+irish_dfm <- dfm_trim(x = irish_dfm, remove_punct=TRUE, remove_numbers=TRUE, remove_symbols = TRUE,
+                      remove = stopwords("en"), min_termfreq=5)
+wfFit <- textmodel_wordfish(x = irish_dfm)
+me_doc <- as.data.frame(cbind(wfFit$docs, wfFit$theta))
+# theta is the politician's ideological position. TODO how to know if 1 = left or 2 = left?
+
+textplot_scale1d(wfFit, groups=docvars(data_corpus_irishbudget2010)$party)
+# Err. Not very true. Lab is the centre-left, Fine Gael (FG) should be centre right, Sinn Féin (SF) should be centre left, 
+```
+
+**Morgan, Arthur (SF) has the highest estimated document fixed effect (alpha) at 0.97481242350511**
+
 b) Plot the wordfish "Eiffel Tower" plot (as in Figure 2 of Slapin and Proksch 2008), from the wordfish object. You can do this using the `textplot_scale1d` function or (even better) using the more advanced code we used in the lecture.
+
+```{r}
+textplot_scale1d(wfFit, margin = c("features"))
+
+# or an ugly version
+plot(wfFit$beta, wfFit$psi)
+text(x=wfFit$beta, y=wfFit$psi, labels=wfFit$features, col = c(2,9) )
+```
+
 
 c) Plot the log of the length in tokens of each text against the alpha-hat from `wfFit`. What does the relationship indicate?
 
+```{r}
+plot(log(ntoken(irish_dfm)), wfFit$alpha)
+# alhpa_hat = estimated document fixed effects
+# number of tokens for each document is increasing in its fixed effects. 
+```
+
+
 d) Plot the log of the frequency of the top most frequent 1000 words against the same psi-hat values from `wfit`, and describe the relationship.
+
+```{r}
+# log(frequency(which.max(irish_dfm))))
+```
+
